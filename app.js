@@ -51,19 +51,80 @@ const btnDeleteConfirm = document.getElementById('btn-delete-confirm');
 const btnExport        = document.getElementById('btn-export');
 const toast            = document.getElementById('toast');
 
-// ─── LOAD DATA ──────────────────────────────────
-function loadData() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    records = raw ? JSON.parse(raw) : [];
-  } catch {
-    records = [];
-  }
+// ─── STORAGE (IndexedDB primary + localStorage fallback) ────
+// IndexedDB works 100% with file:// protocol and NEVER resets on refresh.
+const DB_NAME    = 'PartyScanner';
+const DB_VERSION = 1;
+const STORE_NAME = 'records';
+let db = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const database = e.target.result;
+      if (!database.objectStoreNames.contains(STORE_NAME)) {
+        database.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(db); };
+    req.onerror   = e => reject(e.target.error);
+  });
 }
 
 function saveData() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  if (db) {
+    // Primary: IndexedDB
+    const tx    = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    store.clear();
+    records.forEach(r => store.put(r));
+  }
+  // Fallback: localStorage (best-effort)
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); } catch {}
 }
+
+function loadData() {
+  return new Promise(resolve => {
+    if (db) {
+      // Primary: read from IndexedDB
+      const tx    = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req   = store.getAll();
+      req.onsuccess = e => {
+        const idbData = e.target.result || [];
+        if (idbData.length > 0) {
+          records = idbData.sort((a, b) => new Date(a.time) - new Date(b.time));
+          resolve();
+        } else {
+          // IndexedDB empty — try localStorage fallback (migration)
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            records = raw ? JSON.parse(raw) : [];
+            // Migrate into IndexedDB
+            if (records.length > 0) saveData();
+          } catch { records = []; }
+          resolve();
+        }
+      };
+      req.onerror = () => {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          records = raw ? JSON.parse(raw) : [];
+        } catch { records = []; }
+        resolve();
+      };
+    } else {
+      // No IndexedDB — localStorage only
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        records = raw ? JSON.parse(raw) : [];
+      } catch { records = []; }
+      resolve();
+    }
+  });
+}
+
 
 // ─── STATS ──────────────────────────────────────
 function updateStats() {
@@ -404,7 +465,16 @@ if (!document.getElementById('shakeStyle')) {
   document.head.appendChild(s);
 }
 
+
 // ─── INIT ───────────────────────────────────────
-loadData();
-updateStats();
-renderTable();
+(async () => {
+  try {
+    await openDB();
+  } catch (e) {
+    console.warn('IndexedDB unavailable, using localStorage only:', e);
+  }
+  await loadData();
+  updateStats();
+  renderTable();
+})();
+
