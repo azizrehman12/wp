@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Party Payment Scanner 🎉</title>
+  <meta name="description" content="Scan QR codes at your party, track who paid and how much, export to Excel automatically." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- QR Scanner Library -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- SheetJS for Excel export -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ===== HEADER ===== -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="header-title">
+        <span class="header-icon">🎉</span>
+        <div>
+          <h1 class="header-h1">Party Scanner</h1>
+          <p class="header-sub">Payment Tracker</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn-export" id="btn-export">
+          <span>📊</span> Export Excel
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== MAIN ===== -->
+  <main class="main">
+
+    <!-- ===== STATS CARDS ===== -->
+    <section class="stats-grid">
+      <div class="stat-card stat-blue">
+        <div class="stat-icon">👥</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-count">0</span>
+          <span class="stat-label">Total Scanned</span>
+        </div>
+      </div>
+      <div class="stat-card stat-gold">
+        <div class="stat-icon">💰</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-total">Rs 0</span>
+          <span class="stat-label">Total Collected</span>
+        </div>
+      </div>
+      <div class="stat-card stat-purple">
+        <div class="stat-icon">🎫</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-avg">Rs 0</span>
+          <span class="stat-label">Avg Per Person</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SCANNER SECTION ===== -->
+    <section class="scanner-section">
+      <div class="scanner-header">
+        <h2 class="section-title">📷 QR Scanner</h2>
+        <button class="btn-toggle" id="btn-toggle-scanner">Start Scanning</button>
+      </div>
+
+      <div class="scanner-wrapper" id="scanner-wrapper">
+        <div class="scanner-frame" id="scanner-frame">
+          <div id="reader"></div>
+          <div class="scanner-corners">
+            <span class="corner tl"></span>
+            <span class="corner tr"></span>
+            <span class="corner bl"></span>
+            <span class="corner br"></span>
+          </div>
+          <div class="scanner-line" id="scan-line"></div>
+        </div>
+        <p class="scanner-hint">Point camera at the QR code on the payment receipt</p>
+      </div>
+
+      <!-- Manual entry fallback -->
+      <div class="manual-toggle-wrap">
+        <button class="btn-manual-toggle" id="btn-show-manual">✏️ Enter Manually Instead</button>
+      </div>
+    </section>
+
+    <!-- ===== RECORDS TABLE ===== -->
+    <section class="records-section">
+      <div class="records-header">
+        <h2 class="section-title">📋 Payment Records</h2>
+        <span class="record-count-badge" id="record-badge">0 records</span>
+      </div>
+
+      <div class="search-wrap">
+        <input type="text" id="search-input" class="search-input" placeholder="🔍 Search by name..." />
+      </div>
+
+      <div class="table-wrapper">
+        <table class="records-table" id="records-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Amount (Rs)</th>
+              <th>QR Data</th>
+              <th>Time</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="records-tbody">
+            <tr class="empty-row" id="empty-row">
+              <td colspan="6">
+                <div class="empty-state">
+                  <span class="empty-icon">📭</span>
+                  <p>No records yet. Start scanning!</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== PAYMENT MODAL ===== -->
+  <div class="modal-overlay" id="payment-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-icon">✅</div>
+        <h3 class="modal-title" id="modal-title">QR Code Scanned!</h3>
+        <p class="modal-subtitle" id="modal-qr-data">QR Data: —</p>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="input-name">👤 Person's Name</label>
+          <input type="text" id="input-name" class="form-input" placeholder="Enter full name..." autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="input-amount">💵 Amount Paid (Rs)</label>
+          <input type="number" id="input-amount" class="form-input" placeholder="e.g. 500" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="input-notes">📝 Notes (optional)</label>
+          <input type="text" id="input-notes" class="form-input" placeholder="Any extra note..." />
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" id="btn-modal-cancel">Cancel</button>
+        <button class="btn-save" id="btn-modal-save">💾 Save Record</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MANUAL ENTRY MODAL ===== -->
+  <div class="modal-overlay" id="manual-modal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-icon">✏️</div>
+        <h3 class="modal-title">Manual Entry</h3>
+        <p class="modal-subtitle">Add a payment record manually</p>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="manual-name">👤 Person's Name</label>
+          <input type="text" id="manual-name" class="form-input" placeholder="Enter full name..." autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="manual-amount">💵 Amount Paid (Rs)</label>
+          <input type="number" id="manual-amount" class="form-input" placeholder="e.g. 500" min="0" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="manual-qr">🔖 Ticket/QR Ref (optional)</label>
+          <input type="text" id="manual-qr" class="form-input" placeholder="Any reference number..." />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="manual-notes">📝 Notes (optional)</label>
+          <input type="text" id="manual-notes" class="form-input" placeholder="Any extra note..." />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="btn-manual-cancel">Cancel</button>
+        <button class="btn-save" id="btn-manual-save">💾 Save Record</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== DELETE CONFIRM MODAL ===== -->
+  <div class="modal-overlay" id="delete-modal" role="dialog" aria-modal="true">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <div class="modal-icon">⚠️</div>
+        <h3 class="modal-title">Delete Record?</h3>
+        <p class="modal-subtitle">This action cannot be undone.</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="btn-delete-cancel">Cancel</button>
+        <button class="btn-danger" id="btn-delete-confirm">🗑️ Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TOAST ===== -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
