@@ -443,7 +443,8 @@ body {
 .records-table td:first-child { color: var(--text-muted); font-weight: 600; font-size: 0.78rem; }
 .td-name { font-weight: 600; }
 .td-amount { font-weight: 700; color: var(--gold-light) !important; }
-.td-qr { font-size: 0.75rem; color: var(--text-secondary); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-qr { font-size: 0.75rem; color: var(--text-secondary); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-notes { font-size: 0.78rem; color: var(--text-secondary); max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-time { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
 .btn-del {
   background: transparent; border: 1px solid rgba(239,68,68,0.3); color: var(--red);

@@ -30,22 +30,17 @@ const btnToggleScanner  = document.getElementById('btn-toggle-scanner');
 const scannerWrapper    = document.getElementById('scanner-wrapper');
 const paymentModal      = document.getElementById('payment-modal');
 const modalQrData       = document.getElementById('modal-qr-data');
-const inputName         = document.getElementById('input-name');
 const inputAmount       = document.getElementById('input-amount');
 const inputNotes        = document.getElementById('input-notes');
 const btnModalCancel    = document.getElementById('btn-modal-cancel');
 const btnModalSave      = document.getElementById('btn-modal-save');
 const manualModal       = document.getElementById('manual-modal');
 const btnShowManual     = document.getElementById('btn-show-manual');
-const manualName        = document.getElementById('manual-name');
 const manualAmount      = document.getElementById('manual-amount');
 const manualQr          = document.getElementById('manual-qr');
 const manualNotes       = document.getElementById('manual-notes');
 const btnManualCancel   = document.getElementById('btn-manual-cancel');
 const btnManualSave     = document.getElementById('btn-manual-save');
-const deleteModal       = document.getElementById('delete-modal');
-const btnDeleteCancel   = document.getElementById('btn-delete-cancel');
-const btnDeleteConfirm  = document.getElementById('btn-delete-confirm');
 const btnExport         = document.getElementById('btn-export');
 const toast             = document.getElementById('toast');
 const liveDot           = document.getElementById('live-dot');
@@ -55,7 +50,6 @@ let records        = [];   // local mirror of Firebase data
 let scanner        = null;
 let scannerRunning = false;
 let pendingQrData  = null;
-let deleteTargetId = null;
 let dbRef          = null; // Firebase database reference
 
 // ════════════════════════════════════════════════
@@ -63,7 +57,6 @@ let dbRef          = null; // Firebase database reference
 // ════════════════════════════════════════════════
 function initFirebase() {
   try {
-    // Initialise Firebase app (only once)
     if (!firebase.apps.length) {
       firebase.initializeApp(FIREBASE_CONFIG);
     }
@@ -110,7 +103,7 @@ function initFirebase() {
 }
 
 // ════════════════════════════════════════════════
-//  FIREBASE DATA OPERATIONS
+//  FIREBASE DATA OPERATIONS (Permanent Record)
 // ════════════════════════════════════════════════
 function saveRecord(rec) {
   if (!dbRef) {
@@ -120,14 +113,6 @@ function saveRecord(rec) {
   return dbRef.push(rec).catch(err => {
     console.error('Save error:', err);
     showToast('❌ Save failed: ' + err.message, 'error');
-  });
-}
-
-function deleteRecord(fbKey) {
-  if (!dbRef) return;
-  return dbRef.child(fbKey).remove().catch(err => {
-    console.error('Delete error:', err);
-    showToast('❌ Delete failed: ' + err.message, 'error');
   });
 }
 
@@ -145,11 +130,18 @@ function updateStats() {
 }
 
 // ════════════════════════════════════════════════
-//  RENDER TABLE
+//  RENDER TABLE (No Delete / Action Column)
 // ════════════════════════════════════════════════
 function renderTable(filterText = '') {
-  const query    = filterText.trim().toLowerCase();
-  const filtered = query ? records.filter(r => (r.name || '').toLowerCase().includes(query)) : records;
+  const query = filterText.trim().toLowerCase();
+  const filtered = query
+    ? records.filter(r =>
+        (r.qrData || '').toLowerCase().includes(query) ||
+        (r.notes || '').toLowerCase().includes(query) ||
+        String(r.amount || '').includes(query) ||
+        (r.name || '').toLowerCase().includes(query)
+      )
+    : records;
 
   const existing = recordsTbody.querySelectorAll('tr:not(#empty-row)');
   existing.forEach(r => r.remove());
@@ -163,13 +155,14 @@ function renderTable(filterText = '') {
   [...filtered].reverse().forEach((rec, idx) => {
     const tr = document.createElement('tr');
     tr.dataset.fbKey = rec._fbKey;
+    const refText = rec.qrData || 'Manual';
+    const notesText = rec.notes || (rec.name ? `[${rec.name}]` : '—');
     tr.innerHTML = `
       <td>${filtered.length - idx}</td>
-      <td class="td-name">${escHtml(rec.name || '—')}</td>
       <td class="td-amount">Rs ${Number(rec.amount || 0).toLocaleString()}</td>
-      <td class="td-qr" title="${escHtml(rec.qrData || '')}">${escHtml(truncate(rec.qrData || 'Manual', 24))}</td>
+      <td class="td-qr" title="${escHtml(rec.qrData || '')}">${escHtml(truncate(refText, 32))}</td>
+      <td class="td-notes" title="${escHtml(notesText)}">${escHtml(truncate(notesText, 25))}</td>
       <td class="td-time">${formatTime(rec.time)}</td>
-      <td><button class="btn-del" data-fbkey="${rec._fbKey}" title="Delete record">🗑️ Del</button></td>
     `;
     recordsTbody.appendChild(tr);
   });
@@ -233,21 +226,22 @@ function wireUpApp() {
     scannerRunning ? await stopScanner() : await startScanner();
   });
 
-  // ─── PAYMENT MODAL ────────────────────────────
+  // ─── PAYMENT MODAL (Quick Amount Entry) ───────
   function openPaymentModal(qrData) {
     pendingQrData = qrData;
 
     // Check for duplicate scan
     const duplicate = records.find(r => r.qrData && r.qrData === qrData && r.qrData !== 'Manual');
     if (duplicate) {
-      modalQrData.innerHTML = `<span style="color:var(--gold);font-weight:600">⚠️ Already scanned for "${escHtml(duplicate.name)}" (Rs ${Number(duplicate.amount).toLocaleString()})</span><br/><small>QR: ${escHtml(truncate(qrData, 45))}</small>`;
+      modalQrData.innerHTML = `<span style="color:var(--gold);font-weight:600">⚠️ Already scanned (Rs ${Number(duplicate.amount).toLocaleString()})</span><br/><small>QR: ${escHtml(truncate(qrData, 45))}</small>`;
     } else {
       modalQrData.textContent = 'QR: ' + truncate(qrData, 60);
     }
 
-    inputName.value = ''; inputAmount.value = ''; inputNotes.value = '';
+    inputAmount.value = '';
+    inputNotes.value = '';
     paymentModal.classList.add('open');
-    setTimeout(() => inputName.focus(), 300);
+    setTimeout(() => inputAmount.focus(), 250);
   }
 
   function closePaymentModal() {
@@ -259,66 +253,56 @@ function wireUpApp() {
   paymentModal.addEventListener('click', e => { if (e.target === paymentModal) closePaymentModal(); });
 
   btnModalSave.addEventListener('click', () => {
-    const name = inputName.value.trim();
-    const amount = inputAmount.value;
-    if (!name) { shake(inputName); showToast('⚠️ Please enter a name', 'error'); return; }
-    if (!amount || isNaN(Number(amount))) { shake(inputAmount); showToast('⚠️ Please enter a valid amount', 'error'); return; }
+    const amount = inputAmount.value.trim();
+    if (!amount || isNaN(Number(amount)) || Number(amount) < 0) {
+      shake(inputAmount);
+      showToast('⚠️ Please enter a valid amount', 'error');
+      return;
+    }
     saveRecord({
-      name,
       amount: Number(amount),
       qrData: pendingQrData || '',
       notes: inputNotes.value.trim(),
       time: new Date().toISOString()
     });
-    showToast(`✅ Saved: ${name} — Rs ${Number(amount).toLocaleString()}`, 'success');
+    showToast(`✅ Saved: Rs ${Number(amount).toLocaleString()}`, 'success');
     closePaymentModal();
   });
-  [inputName, inputAmount, inputNotes].forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') btnModalSave.click(); }));
+  [inputAmount, inputNotes].forEach(el => el.addEventListener('keydown', e => {
+    if (e.key === 'Enter') btnModalSave.click();
+  }));
 
-  // ─── MANUAL MODAL ─────────────────────────────
+  // ─── MANUAL MODAL (Quick Amount Entry) ────────
   btnShowManual.addEventListener('click', () => {
-    manualName.value = ''; manualAmount.value = ''; manualQr.value = ''; manualNotes.value = '';
+    manualAmount.value = '';
+    manualQr.value = '';
+    manualNotes.value = '';
     manualModal.classList.add('open');
-    setTimeout(() => manualName.focus(), 300);
+    setTimeout(() => manualAmount.focus(), 250);
   });
   function closeManualModal() { manualModal.classList.remove('open'); }
   btnManualCancel.addEventListener('click', closeManualModal);
   manualModal.addEventListener('click', e => { if (e.target === manualModal) closeManualModal(); });
 
   btnManualSave.addEventListener('click', () => {
-    const name = manualName.value.trim();
-    const amount = manualAmount.value;
-    if (!name) { shake(manualName); showToast('⚠️ Please enter a name', 'error'); return; }
-    if (!amount || isNaN(Number(amount))) { shake(manualAmount); showToast('⚠️ Please enter a valid amount', 'error'); return; }
+    const amount = manualAmount.value.trim();
+    if (!amount || isNaN(Number(amount)) || Number(amount) < 0) {
+      shake(manualAmount);
+      showToast('⚠️ Please enter a valid amount', 'error');
+      return;
+    }
     saveRecord({
-      name,
       amount: Number(amount),
       qrData: manualQr.value.trim() || 'Manual',
       notes: manualNotes.value.trim(),
       time: new Date().toISOString()
     });
-    showToast(`✅ Saved: ${name}`, 'success');
+    showToast(`✅ Saved: Rs ${Number(amount).toLocaleString()}`, 'success');
     closeManualModal();
   });
-  [manualName, manualAmount, manualQr, manualNotes].forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') btnManualSave.click(); }));
-
-  // ─── DELETE ───────────────────────────────────
-  recordsTbody.addEventListener('click', e => {
-    const btn = e.target.closest('[data-fbkey]');
-    if (!btn) return;
-    deleteTargetId = btn.dataset.fbkey;
-    deleteModal.classList.add('open');
-  });
-  btnDeleteCancel.addEventListener('click', () => { deleteModal.classList.remove('open'); deleteTargetId = null; });
-  deleteModal.addEventListener('click', e => { if (e.target === deleteModal) { deleteModal.classList.remove('open'); deleteTargetId = null; } });
-  btnDeleteConfirm.addEventListener('click', () => {
-    if (deleteTargetId) {
-      deleteRecord(deleteTargetId);
-      showToast('🗑️ Record deleted', 'error');
-    }
-    deleteModal.classList.remove('open');
-    deleteTargetId = null;
-  });
+  [manualAmount, manualQr, manualNotes].forEach(el => el.addEventListener('keydown', e => {
+    if (e.key === 'Enter') btnManualSave.click();
+  }));
 
   // ─── SEARCH ───────────────────────────────────
   searchInput.addEventListener('input', () => renderTable(searchInput.value));
@@ -326,24 +310,24 @@ function wireUpApp() {
   // ─── EXPORT TO EXCEL ──────────────────────────
   btnExport.addEventListener('click', () => {
     if (records.length === 0) { showToast('⚠️ No records to export', 'error'); return; }
-    const data = [['#', 'Name', 'Amount (Rs)', 'QR / Reference', 'Notes', 'Date', 'Time']];
+    const data = [['#', 'Amount (Rs)', 'QR / Ticket Ref', 'Notes', 'Date', 'Time']];
     records.forEach((r, i) => {
       const d = new Date(r.time);
+      const note = r.notes ? (r.name ? `${r.notes} (${r.name})` : r.notes) : (r.name || '');
       data.push([
         i + 1,
-        r.name,
         r.amount,
-        r.qrData || '',
-        r.notes || '',
+        r.qrData || 'Manual',
+        note,
         d.toLocaleDateString('en-PK'),
         d.toLocaleTimeString('en-PK')
       ]);
     });
     const total = records.reduce((s, r) => s + (r.amount || 0), 0);
-    data.push([], ['', 'TOTAL', total, '', '', '', ''], ['', 'COUNT', records.length, '', '', '', '']);
+    data.push([], ['', 'TOTAL', total, '', '', ''], ['', 'COUNT', records.length, '', '', '']);
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(data);
-    ws['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 15 }, { wch: 30 }, { wch: 22 }, { wch: 12 }, { wch: 12 }];
+    ws['!cols'] = [{ wch: 5 }, { wch: 15 }, { wch: 30 }, { wch: 25 }, { wch: 14 }, { wch: 14 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Party Payments');
     const now = new Date();
     XLSX.writeFile(wb, `Party_Payments_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.xlsx`);

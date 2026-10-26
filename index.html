@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Party Payment Scanner 🎉</title>
-  <meta name="description" content="Scan QR codes at your party, track who paid and how much, export to Excel automatically." />
+  <meta name="description" content="Scan QR codes at your party, track payment amounts live, export to Excel automatically." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -103,7 +103,7 @@
         </div>
 
         <div class="search-wrap">
-          <input type="text" id="search-input" class="search-input" placeholder="🔍 Search by name..." />
+          <input type="text" id="search-input" class="search-input" placeholder="🔍 Search records (amount, QR ref, notes)..." />
         </div>
 
         <div class="table-wrapper">
@@ -111,16 +111,15 @@
             <thead>
               <tr>
                 <th>#</th>
-                <th>Name</th>
                 <th>Amount (Rs)</th>
-                <th>QR Data</th>
+                <th>QR / Ticket Ref</th>
+                <th>Notes</th>
                 <th>Time</th>
-                <th>Action</th>
               </tr>
             </thead>
             <tbody id="records-tbody">
               <tr class="empty-row" id="empty-row">
-                <td colspan="6">
+                <td colspan="5">
                   <div class="empty-state">
                     <span class="empty-icon">📭</span>
                     <p>No records yet. Start scanning!</p>
@@ -135,7 +134,7 @@
     </main>
   </div>
 
-  <!-- ===== PAYMENT MODAL ===== -->
+  <!-- ===== PAYMENT MODAL (Fast Entry: Amount only) ===== -->
   <div class="modal-overlay" id="payment-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal">
       <div class="modal-header">
@@ -145,16 +144,12 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label" for="input-name">👤 Person's Name</label>
-          <input type="text" id="input-name" class="form-input" placeholder="Enter full name..." autocomplete="off" />
-        </div>
-        <div class="form-group">
           <label class="form-label" for="input-amount">💵 Amount Paid (Rs)</label>
-          <input type="number" id="input-amount" class="form-input" placeholder="e.g. 500" min="0" />
+          <input type="number" id="input-amount" class="form-input" placeholder="Enter amount (e.g. 500)" min="0" autocomplete="off" />
         </div>
         <div class="form-group">
           <label class="form-label" for="input-notes">📝 Notes (optional)</label>
-          <input type="text" id="input-notes" class="form-input" placeholder="Any extra note..." />
+          <input type="text" id="input-notes" class="form-input" placeholder="Any extra note..." autocomplete="off" />
         </div>
       </div>
       <div class="modal-actions">
@@ -164,7 +159,7 @@
     </div>
   </div>
 
-  <!-- ===== MANUAL ENTRY MODAL ===== -->
+  <!-- ===== MANUAL ENTRY MODAL (Amount only) ===== -->
   <div class="modal-overlay" id="manual-modal" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modal-header">
@@ -174,40 +169,21 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label" for="manual-name">👤 Person's Name</label>
-          <input type="text" id="manual-name" class="form-input" placeholder="Enter full name..." autocomplete="off" />
-        </div>
-        <div class="form-group">
           <label class="form-label" for="manual-amount">💵 Amount Paid (Rs)</label>
-          <input type="number" id="manual-amount" class="form-input" placeholder="e.g. 500" min="0" />
+          <input type="number" id="manual-amount" class="form-input" placeholder="Enter amount (e.g. 500)" min="0" autocomplete="off" />
         </div>
         <div class="form-group">
           <label class="form-label" for="manual-qr">🔖 Ticket/QR Ref (optional)</label>
-          <input type="text" id="manual-qr" class="form-input" placeholder="Any reference number..." />
+          <input type="text" id="manual-qr" class="form-input" placeholder="e.g. TICKET-101" autocomplete="off" />
         </div>
         <div class="form-group">
           <label class="form-label" for="manual-notes">📝 Notes (optional)</label>
-          <input type="text" id="manual-notes" class="form-input" placeholder="Any extra note..." />
+          <input type="text" id="manual-notes" class="form-input" placeholder="Any extra note..." autocomplete="off" />
         </div>
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" id="btn-manual-cancel">Cancel</button>
         <button class="btn-save" id="btn-manual-save">💾 Save Record</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== DELETE CONFIRM MODAL ===== -->
-  <div class="modal-overlay" id="delete-modal" role="dialog" aria-modal="true">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <div class="modal-icon">⚠️</div>
-        <h3 class="modal-title">Delete Record?</h3>
-        <p class="modal-subtitle">This action cannot be undone.</p>
-      </div>
-      <div class="modal-actions">
-        <button class="btn-cancel" id="btn-delete-cancel">Cancel</button>
-        <button class="btn-danger" id="btn-delete-confirm">🗑️ Delete</button>
       </div>
     </div>
   </div>
