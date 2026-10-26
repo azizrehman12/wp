@@ -6,17 +6,19 @@
 
 'use strict';
 
-// ─── FIREBASE CONFIG STORAGE KEY ────────────────
-const FB_CONFIG_KEY = 'party_scanner_fb_config';
+// ─── FIREBASE CONFIG ─────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyB9YTLZNA7oqMrsdqgl2yeoEqZ2anqhqRM",
+  authDomain:        "welcome-f2d2f.firebaseapp.com",
+  databaseURL:       "https://welcome-f2d2f-default-rtdb.firebaseio.com",
+  projectId:         "welcome-f2d2f",
+  storageBucket:     "welcome-f2d2f.firebasestorage.app",
+  messagingSenderId: "860380485434",
+  appId:             "1:860380485434:web:da33293cbf8bf48d0f6203",
+  measurementId:     "G-EY2SPDKNW6"
+};
 
-// ─── DOM: SETUP SCREEN ──────────────────────────
-const setupScreen       = document.getElementById('setup-screen');
-const appRoot           = document.getElementById('app-root');
-const fbConfigInput     = document.getElementById('firebase-config-input');
-const btnSaveConfig     = document.getElementById('btn-save-config');
-const configError       = document.getElementById('config-error');
-
-// ─── DOM: APP ───────────────────────────────────
+// ─── DOM: APP ELEMENTS ───────────────────────────
 const statCount         = document.getElementById('stat-count');
 const statTotal         = document.getElementById('stat-total');
 const statAvg           = document.getElementById('stat-avg');
@@ -46,6 +48,7 @@ const btnDeleteCancel   = document.getElementById('btn-delete-cancel');
 const btnDeleteConfirm  = document.getElementById('btn-delete-confirm');
 const btnExport         = document.getElementById('btn-export');
 const toast             = document.getElementById('toast');
+const liveDot           = document.getElementById('live-dot');
 
 // ─── STATE ──────────────────────────────────────
 let records        = [];   // local mirror of Firebase data
@@ -56,70 +59,53 @@ let deleteTargetId = null;
 let dbRef          = null; // Firebase database reference
 
 // ════════════════════════════════════════════════
-//  FIREBASE SETUP
+//  FIREBASE SETUP & REAL-TIME SYNC
 // ════════════════════════════════════════════════
-function getSavedConfig() {
+function initFirebase() {
   try {
-    const raw = localStorage.getItem(FB_CONFIG_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-}
-
-function initFirebase(config) {
-  // Initialise Firebase app (only once)
-  if (!firebase.apps.length) {
-    firebase.initializeApp(config);
-  }
-
-  // Get reference to the "payments" node
-  dbRef = firebase.database().ref('payments');
-
-  // ── Real-time listener: fires on load AND on any change ──
-  dbRef.on('value', snapshot => {
-    const data = snapshot.val();
-    if (data) {
-      records = Object.entries(data).map(([key, val]) => ({ ...val, _fbKey: key }));
-      records.sort((a, b) => new Date(a.time) - new Date(b.time));
-    } else {
-      records = [];
+    // Initialise Firebase app (only once)
+    if (!firebase.apps.length) {
+      firebase.initializeApp(FIREBASE_CONFIG);
     }
-    updateStats();
-    renderTable(searchInput.value);
-  });
-}
 
-// ─── Save Config Button ─────────────────────────
-btnSaveConfig.addEventListener('click', () => {
-  configError.textContent = '';
-  const raw = fbConfigInput.value.trim();
-  if (!raw) { configError.textContent = '⚠️ Please paste your Firebase config.'; return; }
-  let config;
-  try { config = JSON.parse(raw); } catch {
-    configError.textContent = '❌ Invalid JSON. Copy the config exactly from Firebase.';
-    return;
-  }
-  if (!config.databaseURL) {
-    configError.textContent = '❌ Missing "databaseURL". Make sure you created a Realtime Database and copied the full config.';
-    return;
-  }
-  try {
-    localStorage.setItem(FB_CONFIG_KEY, JSON.stringify(config));
-    startApp(config);
-  } catch (e) {
-    configError.textContent = '❌ Firebase error: ' + e.message;
-  }
-});
+    const db = firebase.database();
+    dbRef = db.ref('payments');
 
-function startApp(config) {
-  try {
-    initFirebase(config);
-    setupScreen.style.display = 'none';
-    appRoot.style.display = 'block';
-    showToast('🔥 Connected to Firebase!', 'success');
-    wireUpApp();
-  } catch (e) {
-    configError.textContent = '❌ ' + e.message;
-    localStorage.removeItem(FB_CONFIG_KEY); // clear bad config
+    // Monitor connection state
+    const connectedRef = db.ref('.info/connected');
+    connectedRef.on('value', snap => {
+      if (snap.val() === true) {
+        if (liveDot) {
+          liveDot.textContent = '● LIVE';
+          liveDot.style.color = 'var(--green)';
+        }
+      } else {
+        if (liveDot) {
+          liveDot.textContent = '○ CONNECTING...';
+          liveDot.style.color = 'var(--gold)';
+        }
+      }
+    });
+
+    // Real-time listener: loads all records on start and on every change across all devices
+    dbRef.on('value', snapshot => {
+      const data = snapshot.val();
+      if (data) {
+        records = Object.entries(data).map(([key, val]) => ({ ...val, _fbKey: key }));
+        records.sort((a, b) => new Date(a.time) - new Date(b.time));
+      } else {
+        records = [];
+      }
+      updateStats();
+      renderTable(searchInput ? searchInput.value : '');
+    }, error => {
+      console.error('Firebase Realtime Database error:', error);
+      showToast('⚠️ Firebase: ' + (error.message || 'Permission denied'), 'error');
+    });
+
+  } catch (err) {
+    console.error('Firebase initialization error:', err);
+    showToast('❌ Firebase init failed: ' + err.message, 'error');
   }
 }
 
@@ -127,12 +113,22 @@ function startApp(config) {
 //  FIREBASE DATA OPERATIONS
 // ════════════════════════════════════════════════
 function saveRecord(rec) {
-  // Push creates a unique Firebase key
-  dbRef.push(rec);
+  if (!dbRef) {
+    showToast('⚠️ Database not connected yet', 'error');
+    return;
+  }
+  return dbRef.push(rec).catch(err => {
+    console.error('Save error:', err);
+    showToast('❌ Save failed: ' + err.message, 'error');
+  });
 }
 
 function deleteRecord(fbKey) {
-  dbRef.child(fbKey).remove();
+  if (!dbRef) return;
+  return dbRef.child(fbKey).remove().catch(err => {
+    console.error('Delete error:', err);
+    showToast('❌ Delete failed: ' + err.message, 'error');
+  });
 }
 
 // ════════════════════════════════════════════════
@@ -142,10 +138,10 @@ function updateStats() {
   const count = records.length;
   const total = records.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const avg   = count > 0 ? Math.round(total / count) : 0;
-  statCount.textContent = count;
-  statTotal.textContent = 'Rs ' + total.toLocaleString();
-  statAvg.textContent   = 'Rs ' + avg.toLocaleString();
-  recordBadge.textContent = `${count} record${count !== 1 ? 's' : ''}`;
+  if (statCount)   statCount.textContent = count;
+  if (statTotal)   statTotal.textContent = 'Rs ' + total.toLocaleString();
+  if (statAvg)     statAvg.textContent   = 'Rs ' + avg.toLocaleString();
+  if (recordBadge) recordBadge.textContent = `${count} record${count !== 1 ? 's' : ''}`;
 }
 
 // ════════════════════════════════════════════════
@@ -153,7 +149,7 @@ function updateStats() {
 // ════════════════════════════════════════════════
 function renderTable(filterText = '') {
   const query    = filterText.trim().toLowerCase();
-  const filtered = query ? records.filter(r => r.name.toLowerCase().includes(query)) : records;
+  const filtered = query ? records.filter(r => (r.name || '').toLowerCase().includes(query)) : records;
 
   const existing = recordsTbody.querySelectorAll('tr:not(#empty-row)');
   existing.forEach(r => r.remove());
@@ -171,9 +167,9 @@ function renderTable(filterText = '') {
       <td>${filtered.length - idx}</td>
       <td class="td-name">${escHtml(rec.name || '—')}</td>
       <td class="td-amount">Rs ${Number(rec.amount || 0).toLocaleString()}</td>
-      <td class="td-qr" title="${escHtml(rec.qrData || '')}">${escHtml(truncate(rec.qrData || 'Manual', 20))}</td>
+      <td class="td-qr" title="${escHtml(rec.qrData || '')}">${escHtml(truncate(rec.qrData || 'Manual', 24))}</td>
       <td class="td-time">${formatTime(rec.time)}</td>
-      <td><button class="btn-del" data-fbkey="${rec._fbKey}">🗑️ Del</button></td>
+      <td><button class="btn-del" data-fbkey="${rec._fbKey}" title="Delete record">🗑️ Del</button></td>
     `;
     recordsTbody.appendChild(tr);
   });
@@ -192,7 +188,7 @@ function formatTime(iso) {
 }
 
 // ════════════════════════════════════════════════
-//  WIRE UP ALL APP LOGIC (called after Firebase ready)
+//  WIRE UP ALL APP LOGIC
 // ════════════════════════════════════════════════
 function wireUpApp() {
 
@@ -240,11 +236,20 @@ function wireUpApp() {
   // ─── PAYMENT MODAL ────────────────────────────
   function openPaymentModal(qrData) {
     pendingQrData = qrData;
-    modalQrData.textContent = 'QR: ' + truncate(qrData, 60);
+
+    // Check for duplicate scan
+    const duplicate = records.find(r => r.qrData && r.qrData === qrData && r.qrData !== 'Manual');
+    if (duplicate) {
+      modalQrData.innerHTML = `<span style="color:var(--gold);font-weight:600">⚠️ Already scanned for "${escHtml(duplicate.name)}" (Rs ${Number(duplicate.amount).toLocaleString()})</span><br/><small>QR: ${escHtml(truncate(qrData, 45))}</small>`;
+    } else {
+      modalQrData.textContent = 'QR: ' + truncate(qrData, 60);
+    }
+
     inputName.value = ''; inputAmount.value = ''; inputNotes.value = '';
     paymentModal.classList.add('open');
     setTimeout(() => inputName.focus(), 300);
   }
+
   function closePaymentModal() {
     paymentModal.classList.remove('open');
     pendingQrData = null;
@@ -256,9 +261,15 @@ function wireUpApp() {
   btnModalSave.addEventListener('click', () => {
     const name = inputName.value.trim();
     const amount = inputAmount.value;
-    if (!name)   { shake(inputName);   showToast('⚠️ Please enter a name', 'error'); return; }
+    if (!name) { shake(inputName); showToast('⚠️ Please enter a name', 'error'); return; }
     if (!amount || isNaN(Number(amount))) { shake(inputAmount); showToast('⚠️ Please enter a valid amount', 'error'); return; }
-    saveRecord({ name, amount: Number(amount), qrData: pendingQrData || '', notes: inputNotes.value.trim(), time: new Date().toISOString() });
+    saveRecord({
+      name,
+      amount: Number(amount),
+      qrData: pendingQrData || '',
+      notes: inputNotes.value.trim(),
+      time: new Date().toISOString()
+    });
     showToast(`✅ Saved: ${name} — Rs ${Number(amount).toLocaleString()}`, 'success');
     closePaymentModal();
   });
@@ -277,9 +288,15 @@ function wireUpApp() {
   btnManualSave.addEventListener('click', () => {
     const name = manualName.value.trim();
     const amount = manualAmount.value;
-    if (!name)   { shake(manualName);   showToast('⚠️ Please enter a name', 'error'); return; }
+    if (!name) { shake(manualName); showToast('⚠️ Please enter a name', 'error'); return; }
     if (!amount || isNaN(Number(amount))) { shake(manualAmount); showToast('⚠️ Please enter a valid amount', 'error'); return; }
-    saveRecord({ name, amount: Number(amount), qrData: manualQr.value.trim() || 'Manual', notes: manualNotes.value.trim(), time: new Date().toISOString() });
+    saveRecord({
+      name,
+      amount: Number(amount),
+      qrData: manualQr.value.trim() || 'Manual',
+      notes: manualNotes.value.trim(),
+      time: new Date().toISOString()
+    });
     showToast(`✅ Saved: ${name}`, 'success');
     closeManualModal();
   });
@@ -295,8 +312,12 @@ function wireUpApp() {
   btnDeleteCancel.addEventListener('click', () => { deleteModal.classList.remove('open'); deleteTargetId = null; });
   deleteModal.addEventListener('click', e => { if (e.target === deleteModal) { deleteModal.classList.remove('open'); deleteTargetId = null; } });
   btnDeleteConfirm.addEventListener('click', () => {
-    if (deleteTargetId) { deleteRecord(deleteTargetId); showToast('🗑️ Record deleted', 'error'); }
-    deleteModal.classList.remove('open'); deleteTargetId = null;
+    if (deleteTargetId) {
+      deleteRecord(deleteTargetId);
+      showToast('🗑️ Record deleted', 'error');
+    }
+    deleteModal.classList.remove('open');
+    deleteTargetId = null;
   });
 
   // ─── SEARCH ───────────────────────────────────
@@ -308,7 +329,15 @@ function wireUpApp() {
     const data = [['#', 'Name', 'Amount (Rs)', 'QR / Reference', 'Notes', 'Date', 'Time']];
     records.forEach((r, i) => {
       const d = new Date(r.time);
-      data.push([i + 1, r.name, r.amount, r.qrData || '', r.notes || '', d.toLocaleDateString('en-PK'), d.toLocaleTimeString('en-PK')]);
+      data.push([
+        i + 1,
+        r.name,
+        r.amount,
+        r.qrData || '',
+        r.notes || '',
+        d.toLocaleDateString('en-PK'),
+        d.toLocaleTimeString('en-PK')
+      ]);
     });
     const total = records.reduce((s, r) => s + (r.amount || 0), 0);
     data.push([], ['', 'TOTAL', total, '', '', '', ''], ['', 'COUNT', records.length, '', '', '', '']);
@@ -327,11 +356,12 @@ function wireUpApp() {
 // ════════════════════════════════════════════════
 let toastTimer = null;
 function showToast(msg, type = 'success') {
-  toast.textContent = msg;
+  toast.innerHTML = msg;
   toast.className = 'toast show ' + type;
   if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toast.className = 'toast'; }, 3000);
+  toastTimer = setTimeout(() => { toast.className = 'toast'; }, 3500);
 }
+
 function shake(el) {
   el.style.animation = 'none'; el.offsetHeight;
   el.style.animation = 'shake 0.4s ease';
@@ -342,12 +372,18 @@ shakeStyle.textContent = '@keyframes shake{0%,100%{transform:translateX(0)}20%{t
 document.head.appendChild(shakeStyle);
 
 // ════════════════════════════════════════════════
-//  INIT — check if config exists, else show setup
+//  START APP ON LOAD (guaranteed single run)
 // ════════════════════════════════════════════════
-const savedConfig = getSavedConfig();
-if (savedConfig && savedConfig.databaseURL) {
-  startApp(savedConfig);
+let isInitialized = false;
+function bootstrap() {
+  if (isInitialized) return;
+  isInitialized = true;
+  initFirebase();
+  wireUpApp();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrap);
 } else {
-  setupScreen.style.display = 'flex';
-  appRoot.style.display = 'none';
+  bootstrap();
 }

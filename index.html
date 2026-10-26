@@ -19,52 +19,8 @@
 </head>
 <body>
 
-  <!-- ===== FIREBASE SETUP SCREEN (shown until configured) ===== -->
-  <div id="setup-screen" class="setup-screen">
-    <div class="setup-box">
-      <div class="setup-icon">🔥</div>
-      <h2 class="setup-title">Firebase Setup Required</h2>
-      <p class="setup-desc">
-        To save data across all devices, this app needs a free Firebase project.<br/>
-        It takes <strong>2 minutes</strong> — follow the steps below.
-      </p>
-
-      <div class="setup-steps">
-        <div class="step">
-          <span class="step-num">1</span>
-          <span>Go to <a href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> → Create project (any name)</span>
-        </div>
-        <div class="step">
-          <span class="step-num">2</span>
-          <span>Click <strong>Build → Realtime Database</strong> → Create database → choose "Test mode" → Done</span>
-        </div>
-        <div class="step">
-          <span class="step-num">3</span>
-          <span>Click the ⚙️ gear → <strong>Project Settings</strong> → scroll to "Your apps" → click <strong>&lt;/&gt; Web</strong> → Register app → copy the <code>firebaseConfig</code></span>
-        </div>
-        <div class="step">
-          <span class="step-num">4</span>
-          <span>Paste your config JSON below and click Save</span>
-        </div>
-      </div>
-
-      <textarea id="firebase-config-input" class="config-textarea" placeholder='{
-  "apiKey": "AIza...",
-  "authDomain": "your-project.firebaseapp.com",
-  "databaseURL": "https://your-project-default-rtdb.firebaseio.com",
-  "projectId": "your-project",
-  "storageBucket": "your-project.appspot.com",
-  "messagingSenderId": "123456",
-  "appId": "1:123456:web:abc123"
-}'></textarea>
-
-      <p class="config-error" id="config-error"></p>
-      <button class="btn-save-config" id="btn-save-config">🔥 Connect Firebase & Start</button>
-    </div>
-  </div>
-
-  <!-- ===== MAIN APP (hidden until Firebase is configured) ===== -->
-  <div id="app-root" style="display:none">
+  <!-- ===== MAIN APP ===== -->
+  <div id="app-root">
 
     <!-- ===== HEADER ===== -->
     <header class="header">
@@ -73,11 +29,11 @@
           <span class="header-icon">🎉</span>
           <div>
             <h1 class="header-h1">Party Scanner</h1>
-            <p class="header-sub">Payment Tracker</p>
+            <p class="header-sub">Live Multi-Device Payment Tracker</p>
           </div>
         </div>
         <div class="header-actions">
-          <span class="live-dot" title="Live sync ON">● LIVE</span>
+          <span class="live-dot" id="live-dot" title="Real-time Cloud Sync Active">● LIVE</span>
           <button class="btn-export" id="btn-export">
             <span>📊</span> Export Excel
           </button>
